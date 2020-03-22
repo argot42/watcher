@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,8 @@ const (
 	CHANSIZE = 100
 	SLEEP    = 5000
 )
+
+var Truncated error = errors.New("file truncated")
 
 type Sub struct {
 	Out  chan byte
@@ -36,12 +39,10 @@ func Watch(filepath string) (Sub, error) {
 }
 
 func Subscribe(file *os.File, sub Sub) {
-	/* attempt to replicate a part of tail.c shipped with plan9 */
+	var lastChange time.Time
 
 	defer file.Close()
 	defer close(sub.Out)
-
-	var fi0, fi1 *os.FileInfo
 
 	for {
 		// check if done channel is closed
@@ -49,58 +50,41 @@ func Subscribe(file *os.File, sub Sub) {
 		case <-sub.Done:
 			fmt.Printf("stop watching [%s]\n", file.Name())
 			return
-		default:
+		case <-time.After(SLEEP * time.Millisecond):
 		}
 
-		err := trunc(fi0, &fi1, file)
+		// check if file changed
+		var changed bool
+		var err error
+
+		changed, lastChange, err = change(file, lastChange)
 		if err != nil {
 			sub.Err <- err
 			return
 		}
-		err = write(file, sub.Out)
-		if err != nil {
-			sub.Err <- err
-			return
+		if changed {
+			err = write(file, sub.Out)
+			if err != nil {
+				sub.Err <- err
+				return
+			}
 		}
-		err = trunc(fi1, &fi0, file)
-		if err != nil {
-			sub.Err <- err
-			return
-		}
-		time.Sleep(SLEEP * time.Millisecond)
 	}
 }
 
-func trunc(old *os.FileInfo, new **os.FileInfo, file *os.File) error {
+func change(file *os.File, lastChange time.Time) (bool, time.Time, error) {
 	info, err := file.Stat()
 	if err != nil {
-		return err
+		return false, time.Now(), err
 	}
-
-	var length int64 = 0
-
-	if old != nil {
-		length = (*old).Size()
-	}
-	if info.Size() < length {
-		_, err := file.Seek(0, 0)
-		if err != nil {
-			return err
-		}
-	}
-	newInfo, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	*new = &newInfo
-
-	return nil
+	return lastChange.Before(info.ModTime()), info.ModTime(), nil
 }
 
 func write(r io.Reader, out chan<- byte) error {
 	data := make([]byte, BSIZE)
 
 	for {
+		// read from file
 		n, err := r.Read(data)
 		if err != nil && err != io.EOF {
 			return err
