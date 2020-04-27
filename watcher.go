@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,74 +13,115 @@ const (
 	SLEEP    = 5000
 )
 
-var Truncated error = errors.New("file truncated")
-
-type Sub struct {
-	Out  chan byte
+type R struct {
+	Out  chan ROut
 	Err  chan error
 	Done chan struct{}
 }
 
-func Watch(filepath string) (Sub, error) {
+type ROut struct {
+	Data  byte
+	First bool
+}
+
+type W struct {
+	Out  chan bool
+	Err  chan error
+	Done chan struct{}
+}
+
+func Watch(filepath string) (W, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
-		return Sub{}, err
+		return W{}, err
 	}
 
-	s := Sub{
-		make(chan byte, CHANSIZE),
+	w := W{
+		make(chan bool, CHANSIZE),
 		make(chan error),
 		make(chan struct{}),
 	}
 
-	go Subscribe(file, s)
-	return s, nil
+	go WatchSubscribe(file, w, SLEEP)
+	return w, nil
 }
 
-func Subscribe(file *os.File, sub Sub) {
+func WatchSubscribe(file *os.File, w W, sleep int) {
 	var lastChange time.Time
+	var changed bool
+	var err error
 
 	defer file.Close()
-	defer close(sub.Out)
+	defer close(w.Out)
 
 	for {
-		// check if done channel is closed
 		select {
-		case <-sub.Done:
+		case <-w.Done:
 			fmt.Printf("stop watching [%s]\n", file.Name())
 			return
-		case <-time.After(SLEEP * time.Millisecond):
+		case <-time.After(time.Duration(sleep) * time.Millisecond):
 		}
-
-		// check if file changed
-		var changed bool
-		var err error
 
 		changed, lastChange, err = change(file, lastChange)
 		if err != nil {
-			sub.Err <- err
+			w.Err <- err
 			return
 		}
 		if changed {
-			err = write(file, sub.Out)
-			if err != nil {
-				sub.Err <- err
+			w.Out <- changed
+		}
+	}
+}
+
+func Read(filepath string) (R, error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return R{}, err
+	}
+
+	r := R{
+		make(chan ROut, CHANSIZE),
+		make(chan error),
+		make(chan struct{}),
+	}
+
+	go ReadSubscribe(file, r, SLEEP)
+	return r, nil
+}
+
+func ReadSubscribe(file *os.File, r R, sleep int) {
+	var lastChange time.Time
+	var changed bool
+	var err error
+
+	defer file.Close()
+	defer close(r.Out)
+
+	for {
+		select {
+		case <-r.Done:
+			fmt.Printf("stop watching [%s]\n", file.Name())
+			return
+		case <-time.After(time.Duration(sleep) * time.Millisecond):
+		}
+
+		changed, lastChange, err = change(file, lastChange)
+		if err != nil {
+			r.Err <- err
+			return
+		}
+		if changed {
+			if err = send(file, r.Out, BSIZE); err != nil {
+				r.Err <- err
 				return
 			}
 		}
 	}
 }
 
-func change(file *os.File, lastChange time.Time) (bool, time.Time, error) {
-	info, err := file.Stat()
-	if err != nil {
-		return false, time.Now(), err
-	}
-	return lastChange.Before(info.ModTime()), info.ModTime(), nil
-}
-
-func write(r io.Reader, out chan<- byte) error {
-	data := make([]byte, BSIZE)
+func send(r io.Reader, rout chan<- ROut, bsize int) error {
+	data := make([]byte, bsize)
+	first := true
 
 	for {
 		// read from file
@@ -91,10 +131,23 @@ func write(r io.Reader, out chan<- byte) error {
 		}
 		// send info
 		for _, b := range data[:n] {
-			out <- b
+			rout <- ROut{
+				b,
+				first,
+			}
 		}
 		if err == io.EOF {
 			return nil
 		}
+		first = false
 	}
+}
+
+func change(file *os.File, lastChange time.Time) (bool, time.Time, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return false, time.Now(), err
+	}
+
+	return lastChange.Before(info.ModTime()), info.ModTime(), nil
 }
