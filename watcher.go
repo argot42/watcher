@@ -16,7 +16,7 @@ const (
 type R struct {
 	Out  chan ROut
 	Err  chan error
-	Done chan struct{}
+	Done chan bool
 }
 
 type ROut struct {
@@ -27,7 +27,7 @@ type ROut struct {
 type W struct {
 	Out  chan bool
 	Err  chan error
-	Done chan struct{}
+	Done chan bool
 }
 
 func Watch(filepath string) (W, error) {
@@ -39,7 +39,7 @@ func Watch(filepath string) (W, error) {
 	w := W{
 		make(chan bool, CHANSIZE),
 		make(chan error),
-		make(chan struct{}),
+		make(chan bool),
 	}
 
 	go WatchSubscribe(file, w, SLEEP)
@@ -82,7 +82,7 @@ func Read(filepath string) (R, error) {
 	r := R{
 		make(chan ROut, CHANSIZE),
 		make(chan error),
-		make(chan struct{}),
+		make(chan bool),
 	}
 
 	go ReadSubscribe(file, r, SLEEP)
