@@ -129,11 +129,11 @@ func send(filepath string, rout chan<- ROut, bsize int) error {
 				b,
 				first,
 			}
+		    first = false
 		}
 		if err == io.EOF {
 			return nil
 		}
-		first = false
 	}
 }
 
