@@ -16,7 +16,7 @@ func TestWatchSubscribe(t *testing.T) {
 	w := W{
 		make(chan bool, CHANSIZE),
 		make(chan error),
-		make(chan struct{}),
+		make(chan bool),
 	}
 
 	file, err := createTmpFile("watchSubscribe_test_")
@@ -26,7 +26,7 @@ func TestWatchSubscribe(t *testing.T) {
 	defer os.Remove(file.Name())
 	defer file.Close()
 
-	go WatchSubscribe(file, w, SLEEP)
+	go WatchSubscribe(file.Name(), w, SLEEP)
 
 	for i := 0; i < 5; i++ {
 		file.Write([]byte("田"))
@@ -48,10 +48,10 @@ func TestReadSubscribe(t *testing.T) {
 	r := R{
 		make(chan ROut, CHANSIZE),
 		make(chan error),
-		make(chan struct{}),
+		make(chan bool),
 	}
 	changes := []RSubChange{
-		RSubChange{
+		{
 			11,
 			"米",
 		},
@@ -64,15 +64,8 @@ func TestReadSubscribe(t *testing.T) {
 	defer os.Remove(file.Name())
 	defer file.Close()
 
-	// we open the same file again just for reading so they don't share SEEK data
-	reader, err := os.OpenFile(file.Name(), os.O_RDONLY, 0755)
-	if err != nil {
-		t.Fatalf("error opening file for a second time: %s\n", err)
-	}
-	defer reader.Close()
-
 	// launch subscription
-	go ReadSubscribe(reader, r, SLEEP)
+	go ReadSubscribe(file.Name(), r, SLEEP)
 
 	// write to file
 	for i, c := range changes {
