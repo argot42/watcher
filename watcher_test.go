@@ -13,6 +13,8 @@ type RSubChange struct {
 }
 
 func TestWatchSubscribe(t *testing.T) {
+    t.Logf("BSIZE: %d - CHANSIZE: %d - SLEEP: %d\n", BSIZE, CHANSIZE, SLEEP)
+
 	w := W{
 		make(chan bool, CHANSIZE),
 		make(chan error),
@@ -38,13 +40,15 @@ func TestWatchSubscribe(t *testing.T) {
 				t.Errorf("on iteration %d mod should have been true\n", i)
 			}
 
-		case <-time.After((SLEEP + 100) * time.Millisecond):
+		case <-time.After(time.Duration(SLEEP + 100) * time.Millisecond):
 			t.Errorf("timeout waiting for response on iteration %d!\n", i)
 		}
 	}
 }
 
 func TestReadSubscribe(t *testing.T) {
+    t.Logf("BSIZE: %d - CHANSIZE: %d - SLEEP: %d\n", BSIZE, CHANSIZE, SLEEP)
+
 	r := R{
 		make(chan ROut, CHANSIZE),
 		make(chan error),

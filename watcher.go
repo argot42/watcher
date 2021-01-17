@@ -5,13 +5,49 @@ import (
 	"io"
 	"os"
 	"time"
+    "strconv"
 )
 
-const (
+var (
 	BSIZE    = 2048
 	CHANSIZE = 100
 	SLEEP    = 5000
 )
+
+func init() {
+    bsizeStr := os.Getenv("BSIZE")
+    if len(bsizeStr) > 0 {
+        bsize, err := strconv.Atoi(bsizeStr)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "BSIZE env var err: %s\n", err)
+            os.Exit(1)
+        }
+
+        BSIZE = bsize
+    }
+
+    chansizeStr := os.Getenv("CHANSIZE")
+    if len(chansizeStr) > 0 {
+        chansize, err := strconv.Atoi(chansizeStr)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "CHANSIZE env var err: %s\n", err)
+            os.Exit(1)
+        }
+
+        CHANSIZE = chansize
+    }
+
+    sleepStr := os.Getenv("SLEEP")
+    if len(sleepStr) > 0 {
+        sleep, err := strconv.Atoi(sleepStr)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "SLEEP env var err: %s\n", err)
+            os.Exit(1)
+        }
+
+        SLEEP = sleep
+    }
+}
 
 type R struct {
 	Out  chan ROut
